@@ -90,6 +90,13 @@ jobs:
       shell: pwsh
       run: |
         & "${{ github.workspace }}/Resolve-KqlQueries.ps1" -InputPath "${{ github.workspace }}/AnalyticRules"
+        # Commit resolved files locally so the deploy script's git operations
+        # (branch switching for smart deployment tracking) don't fail on dirty working tree.
+        # This commit stays on the CI runner only — it is never pushed.
+        git config user.name "github-actions"
+        git config user.email "github-actions@github.com"
+        git add -A
+        git commit -m "ci: resolve kql query placeholders [skip ci]" --allow-empty
 
     - name: Deploy Content to Microsoft Sentinel
       uses: azure/powershell@v2
