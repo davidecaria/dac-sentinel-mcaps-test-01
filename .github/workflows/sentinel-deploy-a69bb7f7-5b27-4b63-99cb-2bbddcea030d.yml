@@ -79,7 +79,7 @@ jobs:
 
     - name: Install Bicep CLI
       shell: pwsh
-      run: az bicep install --force
+      run: az bicep install
 
     - name: Deploy Content to Microsoft Sentinel
       uses: azure/powershell@v2
