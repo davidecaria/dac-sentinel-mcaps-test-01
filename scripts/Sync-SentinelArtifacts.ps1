@@ -155,6 +155,19 @@ function Get-FrontMatterValue {
     return $DefaultValue
 }
 
+function Get-MarkdownPathLink {
+    param(
+        [string]$CatalogDirectory,
+        [string]$TargetPath
+    )
+
+    $displayPath = Get-NormalizedRelativePath -BasePath $RepositoryRoot -TargetPath $TargetPath
+    $relativeTarget = Get-NormalizedRelativePath -BasePath $CatalogDirectory -TargetPath $TargetPath
+    $encodedTarget = $relativeTarget.Replace(' ', '%20')
+
+    return "[$displayPath]($encodedTarget)"
+}
+
 function Get-AdsCatalogContent {
     param([string[]]$DetectionRelativePaths)
 
@@ -164,8 +177,8 @@ function Get-AdsCatalogContent {
         '',
         'Generated file. Do not edit directly.',
         '',
-        '| Detection | Status | Priority | Severity | Owner | Rule Name | Tactics | ADS |',
-        '| --- | --- | --- | --- | --- | --- | --- | --- |'
+        '| Detection | Status | Priority | Severity | Owner | Rule Name | Tactics | Query | Metadata | Rule | ADS |',
+        '| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |'
     )
 
     if ($DetectionRelativePaths.Count -eq 0) {
@@ -175,17 +188,22 @@ function Get-AdsCatalogContent {
     $rows = foreach ($detectionRelativePath in $DetectionRelativePaths) {
         $sourceDetectionPath = Join-Path $SourceRoot $detectionRelativePath
         $metadataPath = Join-Path $sourceDetectionPath 'metadata.bicep'
+        $queryPath = Join-Path $sourceDetectionPath 'query.kql'
         $adsPath = Join-Path $sourceDetectionPath 'ads.md'
+        $generatedRulePath = Join-Path (Join-Path $DeployRoot $detectionRelativePath) 'rule.bicep'
         $metadataTemplate = az bicep build --file $metadataPath --stdout | Out-String | ConvertFrom-Json
         $metadata = $metadataTemplate.outputs.metadata.value
         $frontMatter = Get-AdsFrontMatter -AdsPath $adsPath
-        $adsRelativePath = Get-NormalizedRelativePath -BasePath $catalogDirectory -TargetPath $adsPath
         $status = Get-FrontMatterValue -FrontMatter $frontMatter -Key 'status' -DefaultValue 'unspecified'
         $priority = Get-FrontMatterValue -FrontMatter $frontMatter -Key 'priority' -DefaultValue 'unspecified'
         $owner = Get-FrontMatterValue -FrontMatter $frontMatter -Key 'owner' -DefaultValue 'unassigned'
         $tactics = if ($metadata.PSObject.Properties.Name -contains 'tactics') { $metadata.tactics } else { @() }
+        $queryLink = Get-MarkdownPathLink -CatalogDirectory $catalogDirectory -TargetPath $queryPath
+        $metadataLink = Get-MarkdownPathLink -CatalogDirectory $catalogDirectory -TargetPath $metadataPath
+        $generatedRuleLink = Get-MarkdownPathLink -CatalogDirectory $catalogDirectory -TargetPath $generatedRulePath
+        $adsLink = Get-MarkdownPathLink -CatalogDirectory $catalogDirectory -TargetPath $adsPath
 
-        "| $(ConvertTo-MarkdownCell $metadata.displayName) | $(ConvertTo-MarkdownCell $status) | $(ConvertTo-MarkdownCell $priority) | $(ConvertTo-MarkdownCell $metadata.severity) | $(ConvertTo-MarkdownCell $owner) | $(ConvertTo-MarkdownCell $metadata.ruleName) | $(ConvertTo-MarkdownCell $tactics) | [ads.md]($adsRelativePath) |"
+        "| $(ConvertTo-MarkdownCell $metadata.displayName) | $(ConvertTo-MarkdownCell $status) | $(ConvertTo-MarkdownCell $priority) | $(ConvertTo-MarkdownCell $metadata.severity) | $(ConvertTo-MarkdownCell $owner) | $(ConvertTo-MarkdownCell $metadata.ruleName) | $(ConvertTo-MarkdownCell $tactics) | $queryLink | $metadataLink | $generatedRuleLink | $adsLink |"
     }
 
     return ($header + $rows) -join "`n"

@@ -14,7 +14,7 @@ Each detection folder contains:
 
 Generated deployable artifacts live under `AnalyticRules/**` and are the only files the Sentinel deployment workflow deploys.
 
-The repository also maintains a generated `docs/ADS-Catalog.md` file that provides a top-level index of all ADS documents.
+The repository also maintains a generated `docs/ADS-Catalog.md` file that provides a top-level index of all ADS documents, including automatically derived paths to the source query, source metadata, generated rule, and ADS document for each detection.
 
 ## Workflows
 
