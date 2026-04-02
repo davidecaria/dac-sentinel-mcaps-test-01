@@ -1,0 +1,59 @@
+name: Build Sentinel Artifacts
+
+on:
+  push:
+    paths:
+    - 'src/**'
+    - 'scripts/Sync-SentinelArtifacts.ps1'
+    - '.github/workflows/sentinel-build-artifacts.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-artifacts:
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Install Bicep CLI
+      shell: pwsh
+      run: az bicep install
+
+    - name: Regenerate impacted artifacts
+      shell: pwsh
+      run: |
+        $baseCommit = '${{ github.event.before }}'
+        $zeroCommit = '0000000000000000000000000000000000000000'
+        $rebuildAll = '${{ github.event_name }}' -eq 'workflow_dispatch'
+
+        if (-not $rebuildAll -and -not [string]::IsNullOrWhiteSpace($baseCommit) -and $baseCommit -ne $zeroCommit) {
+          $fullRebuildTriggers = git diff --name-only $baseCommit '${{ github.sha }}' -- scripts/Sync-SentinelArtifacts.ps1 .github/workflows/sentinel-build-artifacts.yml
+          $rebuildAll = $fullRebuildTriggers.Count -gt 0
+        }
+
+        if ($rebuildAll -or [string]::IsNullOrWhiteSpace($baseCommit) -or $baseCommit -eq $zeroCommit) {
+          & "${{ github.workspace }}/scripts/Sync-SentinelArtifacts.ps1" -RepositoryRoot "${{ github.workspace }}" -RebuildAll
+        }
+        else {
+          & "${{ github.workspace }}/scripts/Sync-SentinelArtifacts.ps1" -RepositoryRoot "${{ github.workspace }}" -BaseCommit $baseCommit -HeadCommit '${{ github.sha }}'
+        }
+
+    - name: Commit generated artifacts
+      shell: pwsh
+      run: |
+        git add AnalyticRules
+        if (git diff --cached --quiet) {
+          Write-Host 'No generated artifact changes detected.'
+          exit 0
+        }
+
+        git config user.name 'github-actions'
+        git config user.email 'github-actions@github.com'
+        git commit -m 'ci: regenerate Sentinel artifacts [skip ci]'
+        git push
