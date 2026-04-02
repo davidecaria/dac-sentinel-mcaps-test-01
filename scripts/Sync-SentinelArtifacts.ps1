@@ -2,6 +2,7 @@ param(
     [string]$RepositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path,
     [string]$SourceRoot,
     [string]$DeployRoot,
+    [string]$AdsCatalogPath,
     [string]$BaseCommit,
     [string]$HeadCommit = 'HEAD',
     [switch]$RebuildAll
@@ -16,6 +17,10 @@ if (-not $SourceRoot) {
 
 if (-not $DeployRoot) {
     $DeployRoot = Join-Path $RepositoryRoot 'AnalyticRules'
+}
+
+if (-not $AdsCatalogPath) {
+    $AdsCatalogPath = Join-Path $RepositoryRoot 'docs\ADS-Catalog.md'
 }
 
 function Get-NormalizedRelativePath {
@@ -69,6 +74,121 @@ function Get-SourceDetectionPaths {
         } |
         Where-Object { $_ -and $_ -ne '.' } |
         Sort-Object -Unique
+}
+
+function Get-AllSourceDetectionPaths {
+    return Get-ChildItem -Path $SourceRoot -Recurse -Filter metadata.bicep |
+        ForEach-Object { Get-NormalizedRelativePath -BasePath $SourceRoot -TargetPath $_.DirectoryName } |
+        Sort-Object -Unique
+}
+
+function Get-AdsFrontMatter {
+    param([string]$AdsPath)
+
+    if (-not (Test-Path $AdsPath)) {
+        throw "Detection ADS file not found: $AdsPath"
+    }
+
+    $lines = Get-Content -Path $AdsPath
+    if ($lines.Count -eq 0 -or $lines[0].Trim() -ne '---') {
+        throw "ADS file '$AdsPath' must start with a front matter block delimited by --- lines."
+    }
+
+    $frontMatter = [ordered]@{}
+    $closingDelimiterFound = $false
+
+    for ($index = 1; $index -lt $lines.Count; $index++) {
+        $line = $lines[$index].Trim()
+
+        if ($line -eq '---') {
+            $closingDelimiterFound = $true
+            break
+        }
+
+        if ([string]::IsNullOrWhiteSpace($line)) {
+            continue
+        }
+
+        if ($line -match '^(?<key>[A-Za-z0-9_-]+)\s*:\s*(?<value>.*)$') {
+            $frontMatter[$matches.key] = $matches.value.Trim()
+            continue
+        }
+
+        throw "ADS front matter line '$line' in '$AdsPath' is not in 'key: value' format."
+    }
+
+    if (-not $closingDelimiterFound) {
+        throw "ADS file '$AdsPath' is missing the closing front matter delimiter."
+    }
+
+    return [pscustomobject]$frontMatter
+}
+
+function ConvertTo-MarkdownCell {
+    param([AllowNull()][object]$Value)
+
+    if ($null -eq $Value) {
+        return ''
+    }
+
+    $text = if ($Value -is [System.Collections.IEnumerable] -and -not ($Value -is [string])) {
+        (@($Value) | ForEach-Object { [string]$_ }) -join ', '
+    }
+    else {
+        [string]$Value
+    }
+
+    return $text.Replace('|', '\|').Replace("`r", ' ').Replace("`n", ' ')
+}
+
+function Get-FrontMatterValue {
+    param(
+        [pscustomobject]$FrontMatter,
+        [string]$Key,
+        [string]$DefaultValue = ''
+    )
+
+    if ($FrontMatter.PSObject.Properties.Name -contains $Key) {
+        return [string]$FrontMatter.$Key
+    }
+
+    return $DefaultValue
+}
+
+function Get-AdsCatalogContent {
+    param([string[]]$DetectionRelativePaths)
+
+    $catalogDirectory = Split-Path -Parent $AdsCatalogPath
+    $header = @(
+        '# ADS Catalog',
+        '',
+        'Generated file. Do not edit directly.',
+        '',
+        '| Detection | Status | Priority | Severity | Owner | Rule Name | Tactics | ADS |',
+        '| --- | --- | --- | --- | --- | --- | --- | --- |'
+    )
+
+    if ($DetectionRelativePaths.Count -eq 0) {
+        return ($header + '', 'No detections found.') -join "`n"
+    }
+
+    $rows = foreach ($detectionRelativePath in $DetectionRelativePaths) {
+        $sourceDetectionPath = Join-Path $SourceRoot $detectionRelativePath
+        $metadataPath = Join-Path $sourceDetectionPath 'metadata.bicep'
+        $adsPath = Join-Path $sourceDetectionPath 'ads.md'
+        $metadataTemplate = az bicep build --file $metadataPath --stdout | Out-String | ConvertFrom-Json
+        $metadata = $metadataTemplate.outputs.metadata.value
+        $frontMatter = Get-AdsFrontMatter -AdsPath $adsPath
+        $adsRelativePath = Get-NormalizedRelativePath -BasePath $catalogDirectory -TargetPath $adsPath
+        $status = Get-FrontMatterValue -FrontMatter $frontMatter -Key 'status' -DefaultValue 'unspecified'
+        $priority = Get-FrontMatterValue -FrontMatter $frontMatter -Key 'priority' -DefaultValue 'unspecified'
+        $owner = Get-FrontMatterValue -FrontMatter $frontMatter -Key 'owner' -DefaultValue 'unassigned'
+        $tactics = if ($metadata.PSObject.Properties.Name -contains 'tactics') { $metadata.tactics } else { @() }
+
+        "| $(ConvertTo-MarkdownCell $metadata.displayName) | $(ConvertTo-MarkdownCell $status) | $(ConvertTo-MarkdownCell $priority) | $(ConvertTo-MarkdownCell $metadata.severity) | $(ConvertTo-MarkdownCell $owner) | $(ConvertTo-MarkdownCell $metadata.ruleName) | $(ConvertTo-MarkdownCell $tactics) | [ads.md]($adsRelativePath) |"
+    }
+
+    return ($header + $rows) -join "`n"
 }
 
 function Get-GeneratedRuleContent {
@@ -137,11 +257,6 @@ resource analyticRule 'Microsoft.SecurityInsights/alertRules@2025-09-01' = {
 
 $detectionRelativePaths = @(Get-SourceDetectionPaths)
 
-if ($detectionRelativePaths.Count -eq 0) {
-    Write-Host 'No source detections require regeneration.'
-    exit 0
-}
-
 foreach ($detectionRelativePath in $detectionRelativePaths) {
     $sourceDetectionPath = Join-Path $SourceRoot $detectionRelativePath
     $deployDetectionPath = Join-Path $DeployRoot $detectionRelativePath
@@ -170,3 +285,18 @@ foreach ($detectionRelativePath in $detectionRelativePaths) {
     Set-Content -Path $generatedRulePath -Value $generatedRuleContent
     Write-Host "Updated generated artifact '$generatedRulePath'."
 }
+
+if ($detectionRelativePaths.Count -eq 0) {
+    Write-Host 'No source detections required artifact regeneration.'
+}
+
+$allDetectionRelativePaths = @(Get-AllSourceDetectionPaths)
+$adsCatalogContent = Get-AdsCatalogContent -DetectionRelativePaths $allDetectionRelativePaths
+$adsCatalogDirectory = Split-Path -Parent $AdsCatalogPath
+
+if (-not [string]::IsNullOrWhiteSpace($adsCatalogDirectory)) {
+    New-Item -Path $adsCatalogDirectory -ItemType Directory -Force | Out-Null
+}
+
+Set-Content -Path $AdsCatalogPath -Value $adsCatalogContent
+Write-Host "Updated ADS catalog '$AdsCatalogPath'."

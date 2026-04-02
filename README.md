@@ -10,8 +10,11 @@ Each detection folder contains:
 
 - `metadata.bicep` for the rule metadata and scheduled rule properties.
 - `query.kql` for the KQL query.
+- `ads.md` for the human-readable Alerting and Detection Strategy (ADS) document.
 
 Generated deployable artifacts live under `AnalyticRules/**` and are the only files the Sentinel deployment workflow deploys.
+
+The repository also maintains a generated `docs/ADS-Catalog.md` file that provides a top-level index of all ADS documents.
 
 ## Workflows
 

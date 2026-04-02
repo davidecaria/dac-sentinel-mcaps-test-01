@@ -47,13 +47,13 @@ jobs:
     - name: Commit generated artifacts
       shell: pwsh
       run: |
-        git add AnalyticRules
+        git add AnalyticRules docs
         if (git diff --cached --quiet) {
-          Write-Host 'No generated artifact changes detected.'
+          Write-Host 'No generated artifact or catalog changes detected.'
           exit 0
         }
 
         git config user.name 'github-actions'
         git config user.email 'github-actions@github.com'
-        git commit -m 'ci: regenerate Sentinel artifacts [skip ci]'
+        git commit -m 'ci: regenerate Sentinel artifacts and ADS catalog [skip ci]'
         git push
