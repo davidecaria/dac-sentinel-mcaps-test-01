@@ -424,11 +424,11 @@ function LoadDeploymentConfig() {
             $deployment_config = Get-Content $configPath | Out-String | ConvertFrom-Json
             $parameterFileMappings = @{}
             if ($deployment_config.parameterfilemappings) {
-                $deployment_config.parameterfilemappings.psobject.properties | ForEach { $parameterFileMappings[$_.Name] = $_.Value }
+                $deployment_config.parameterfilemappings.psobject.properties | ForEach-Object { $parameterFileMappings[$_.Name] = $_.Value }
             }
-            $key = ($parameterFileMappings.Keys | ? { $_ -eq $workspaceId })
+            $key = ($parameterFileMappings.Keys | Where-Object { $_ -eq $workspaceId })
             if ($null -ne $key) {
-                $parameterFileMappings[$key].psobject.properties | ForEach { $global:parameterFileMapping[$_.Name] = $_.Value }
+                $parameterFileMappings[$key].psobject.properties | ForEach-Object { $global:parameterFileMapping[$_.Name] = $_.Value }
             }
             if ($deployment_config.prioritizedcontentfiles) {
                 $global:prioritizedContentFiles = $deployment_config.prioritizedcontentfiles
@@ -513,18 +513,63 @@ function GetParameterFile($path) {
     return $null
 }
 
+function Get-DeploymentDirectories {
+    if ([string]::IsNullOrWhiteSpace($Directory)) {
+        return @()
+    }
+
+    return @(
+        $Directory -split '[,;]' |
+            ForEach-Object { $_.Trim() } |
+            Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
+            Select-Object -Unique
+    )
+}
+
 function Deployment($fullDeploymentFlag, $remoteShaTable, $tree) {
-    Write-Host "Starting Deployment for Files in path: $Directory"
-    if (Test-Path -Path $Directory)
+    $deploymentDirectories = @(Get-DeploymentDirectories)
+
+    if ($deploymentDirectories.Count -eq 0) {
+        Write-Output '[Warning] No deployment directories were configured. nothing to deploy'
+        return
+    }
+
+    Write-Host "Starting Deployment for Files in paths: $($deploymentDirectories -join ', ')"
+
+    $existingDirectories = @()
+    foreach ($deploymentDirectory in $deploymentDirectories) {
+        if (Test-Path -Path $deploymentDirectory) {
+            $existingDirectories += $deploymentDirectory
+        }
+        else {
+            Write-Output "[Warning] $deploymentDirectory not found. Skipping this deployment path."
+        }
+    }
+
+    if ($existingDirectories.Count -gt 0)
     {
         $totalFiles = 0;
         $totalFailed = 0;
 	      $iterationList = @()
         $global:prioritizedContentFiles | ForEach-Object  { $iterationList += (AbsolutePathWithSlash $_) }
-        Get-ChildItem -Path $Directory -Recurse -Include *.bicep, *.json -exclude *metadata.json, *.parameters*.json, *.bicepparam, bicepconfig.json |
-                        Where-Object { $null -eq ( filterContentFile $_.FullName ) } |
-                        Select-Object -Property FullName |
-                        ForEach-Object { $iterationList += $_.FullName }
+
+        foreach ($deploymentDirectory in $existingDirectories) {
+            Get-ChildItem -Path $deploymentDirectory -Recurse -Include *.bicep, *.json -exclude *metadata.json, *.parameters*.json, *.bicepparam, bicepconfig.json |
+                Where-Object { $null -eq ( filterContentFile $_.FullName ) } |
+                Select-Object -Property FullName |
+                ForEach-Object { $iterationList += $_.FullName }
+        }
+
+        $deduplicatedIterationList = @()
+        $seenPaths = @{}
+        foreach ($contentPath in $iterationList) {
+            if (-not $seenPaths.ContainsKey($contentPath)) {
+                $seenPaths[$contentPath] = $true
+                $deduplicatedIterationList += $contentPath
+            }
+        }
+
+        $iterationList = $deduplicatedIterationList
         $iterationList | ForEach-Object {
             $path = $_
             Write-Host "[Info] Try to deploy $path"
@@ -570,7 +615,7 @@ function Deployment($fullDeploymentFlag, $remoteShaTable, $tree) {
     }
     else
     {
-        Write-Output "[Warning] $Directory not found. nothing to deploy"
+        Write-Output '[Warning] None of the configured deployment directories were found. nothing to deploy'
     }
 }
 

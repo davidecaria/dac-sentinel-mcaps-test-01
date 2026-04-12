@@ -1,0 +1,22 @@
+let lookback = 1d;
+let failureWindow = 5m;
+let suspiciousIPs =
+    SigninLogs
+    | where TimeGenerated >= ago(lookback)
+    | where ResultType != 0
+    | summarize FailedAttempts = count(), TargetedUsers = dcount(UserPrincipalName) by IPAddress, bin(TimeGenerated, failureWindow)
+    | where FailedAttempts >= 10 and TargetedUsers >= 5
+    | project IPAddress;
+SigninLogs
+| where TimeGenerated >= ago(lookback)
+| where IPAddress in (suspiciousIPs)
+| summarize
+    FailedAttempts = countif(ResultType != 0),
+    SuccessfulAttempts = countif(ResultType == 0),
+    TargetedUsers = dcount(UserPrincipalName),
+    Users = make_set(UserPrincipalName, 50),
+    Apps = make_set(AppDisplayName, 20),
+    ResultCodes = make_set(tostring(ResultType), 20),
+    LastSeen = max(TimeGenerated)
+  by IPAddress
+| order by FailedAttempts desc, TargetedUsers desc

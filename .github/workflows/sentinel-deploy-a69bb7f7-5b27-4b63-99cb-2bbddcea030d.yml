@@ -5,7 +5,14 @@ on:
     branches: [ main ]
     paths:
     - 'AnalyticRules/**'
+    - 'AutomationRules/**'
+    - 'HuntingQueries/**'
+    - 'Parsers/**'
+    - 'Playbooks/**'
+    - 'Workbooks/**'
+    - 'CustomDetections/**'
     - '!.github/workflows/**'  # this filter prevents other workflow changes from triggering this workflow
+    - 'sentinel-deployment.config'
     - '.github/workflows/sentinel-deploy-a69bb7f7-5b27-4b63-99cb-2bbddcea030d.yml'
   workflow_run:
     workflows: [ Build Sentinel Artifacts ]
@@ -19,9 +26,9 @@ jobs:
       resourceGroupName: 'rg-sentinel-test'
       workspaceName: 'sentinel-test-01'
       workspaceId: '41f155b3-16e0-4114-b56a-64ec1b44c582'
-      directory: '${{ github.workspace }}/AnalyticRules'
+      directory: '${{ github.workspace }}/AnalyticRules,${{ github.workspace }}/AutomationRules,${{ github.workspace }}/HuntingQueries,${{ github.workspace }}/Parsers,${{ github.workspace }}/Playbooks,${{ github.workspace }}/Workbooks,${{ github.workspace }}/CustomDetections'
       cloudEnv: 'AzureCloud'
-      contentTypes: 'AnalyticsRule'
+      contentTypes: 'AnalyticsRule,AutomationRule,HuntingQuery,Parser,Playbook,Workbook,CustomDetection'
       branch: 'main'
       sourceControlId: 'a69bb7f7-5b27-4b63-99cb-2bbddcea030d'
       rootDirectory: '${{ github.workspace }}'
