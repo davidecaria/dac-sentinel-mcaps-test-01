@@ -1,6 +1,6 @@
 output metadata object = {
   ruleName: 'AAD-PasswordSpray'
-  displayName: 'AAD Password Spray - Multiple Users Same IP'
+  displayName: 'AAD Password Spray - Multiple Users Same IP v2'
   description: 'Detects multiple failed Azure AD sign-ins from the same IP across multiple users.'
   enabled: true
   severity: 'High'
