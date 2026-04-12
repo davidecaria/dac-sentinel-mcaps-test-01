@@ -477,8 +477,7 @@ function Get-GeneratedHuntingQueryContent {
         'dataSource',
         'functionAlias',
         'functionParameters',
-        'tags',
-        'etag'
+        'tags'
     )
 
     foreach ($property in $Metadata.PSObject.Properties) {
@@ -512,7 +511,6 @@ function Get-GeneratedHuntingQueryContent {
     $escapedQueryName = Escape-BicepString $Metadata.queryName
     $escapedDisplayName = Escape-BicepString $Metadata.displayName
     $escapedCategory = Escape-BicepString $(if ($Metadata.PSObject.Properties.Name -contains 'category' -and -not [string]::IsNullOrWhiteSpace([string]$Metadata.category)) { [string]$Metadata.category } else { 'Hunting Queries' })
-    $escapedEtag = Escape-BicepString $(if ($Metadata.PSObject.Properties.Name -contains 'etag' -and -not [string]::IsNullOrWhiteSpace([string]$Metadata.etag)) { [string]$Metadata.etag } else { '*' })
     $queryVersion = if ($Metadata.PSObject.Properties.Name -contains 'version') { [int]$Metadata.version } else { 2 }
     $inlineQuery = ConvertTo-BicepMultilineString -Value $QueryText
     $sourceMetadataPath = Get-NormalizedRelativePath -BasePath $RepositoryRoot -TargetPath (Join-Path $HuntingSourceRoot (Join-Path $HuntingQueryRelativePath 'metadata.bicep'))
@@ -553,7 +551,6 @@ resource logAnalyticsWorkspace 'Microsoft.OperationalInsights/workspaces@2025-02
 resource huntingQuery 'Microsoft.OperationalInsights/workspaces/savedSearches@2025-02-01' = {
   name: queryName
   parent: logAnalyticsWorkspace
-  etag: '$escapedEtag'
   properties: union(optionalProperties, {
     category: '$escapedCategory'
     displayName: '`${displayNamePrefix}`${queryDisplayName}'

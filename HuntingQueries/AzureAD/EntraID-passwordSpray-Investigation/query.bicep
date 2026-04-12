@@ -18,7 +18,6 @@ resource logAnalyticsWorkspace 'Microsoft.OperationalInsights/workspaces@2025-02
 resource huntingQuery 'Microsoft.OperationalInsights/workspaces/savedSearches@2025-02-01' = {
   name: queryName
   parent: logAnalyticsWorkspace
-  etag: '*'
   properties: union(optionalProperties, {
     category: 'Hunting Queries'
     displayName: '${displayNamePrefix}${queryDisplayName}'
