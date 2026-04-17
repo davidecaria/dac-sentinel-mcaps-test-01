@@ -4,6 +4,8 @@ param(
     [string]$DeployRoot,
     [string]$HuntingSourceRoot,
     [string]$HuntingDeployRoot,
+    [string]$PlaybookSourceRoot,
+    [string]$PlaybookDeployRoot,
     [string]$AdsCatalogPath,
     [string]$ContentCatalogPath,
     [string]$BaseCommit,
@@ -30,6 +32,14 @@ if (-not $HuntingDeployRoot) {
     $HuntingDeployRoot = Join-Path $RepositoryRoot 'HuntingQueries'
 }
 
+if (-not $PlaybookSourceRoot) {
+    $PlaybookSourceRoot = Join-Path $RepositoryRoot 'src\Playbooks'
+}
+
+if (-not $PlaybookDeployRoot) {
+    $PlaybookDeployRoot = Join-Path $RepositoryRoot 'Playbooks'
+}
+
 if (-not $AdsCatalogPath) {
     $AdsCatalogPath = Join-Path $RepositoryRoot 'docs\ADS-Catalog.md'
 }
@@ -51,6 +61,7 @@ $SupportedDeployRoots = [ordered]@{
 $GeneratedSourceRoots = [ordered]@{
     'AnalyticRules'  = 'src/AnalyticRules'
     'HuntingQueries' = 'src/HuntingQueries'
+    'Playbooks'      = 'src/Playbooks'
 }
 
 function Get-NormalizedRelativePath {
@@ -561,6 +572,128 @@ resource huntingQuery 'Microsoft.OperationalInsights/workspaces/savedSearches@20
 "@
 }
 
+function Get-GeneratedPlaybookContent {
+    param(
+        [string]$PlaybookRelativePath,
+        [pscustomobject]$Metadata
+    )
+
+    foreach ($requiredProperty in @('playbookName', 'displayName', 'connections')) {
+        if (-not ($Metadata.PSObject.Properties.Name -contains $requiredProperty)) {
+            throw "Source metadata for playbook '$PlaybookRelativePath' is missing required property '$requiredProperty'."
+        }
+    }
+
+    $connections = @($Metadata.connections)
+    if ($connections.Count -eq 0) {
+        throw "Source metadata for playbook '$PlaybookRelativePath' must define at least one connection."
+    }
+
+    $escapedPlaybookName = Escape-BicepString $Metadata.playbookName
+    $sourceMetadataPath = Get-NormalizedRelativePath -BasePath $RepositoryRoot -TargetPath (Join-Path $PlaybookSourceRoot (Join-Path $PlaybookRelativePath 'metadata.bicep'))
+    $sourceDefinitionPath = Get-NormalizedRelativePath -BasePath $RepositoryRoot -TargetPath (Join-Path $PlaybookSourceRoot (Join-Path $PlaybookRelativePath 'definition.json'))
+
+    $connectionResources = New-Object System.Collections.Generic.List[string]
+    $connectionParameterEntries = New-Object System.Collections.Generic.List[string]
+
+    foreach ($connection in $connections) {
+        $connName = [string]$connection.name
+        $connApiId = [string]$connection.apiId
+        $useMsi = $false
+        if ($connection.PSObject.Properties.Name -contains 'useManagedIdentity') {
+            $useMsi = [bool]$connection.useManagedIdentity
+        }
+
+        $escapedConnName = Escape-BicepString $connName
+        $escapedApiId = Escape-BicepString $connApiId
+
+        $resourceBlock = @"
+
+resource ${connName}Connection 'Microsoft.Web/connections@2016-06-01' = {
+  name: '${escapedConnName}-`${playbookName}'
+  location: location
+  properties: {
+    displayName: '${escapedConnName}-`${playbookName}'
+    api: {
+      id: subscriptionResourceId('Microsoft.Web/locations/managedApis', location, '${escapedApiId}')
+    }
+"@
+
+        if ($useMsi) {
+            $resourceBlock += @"
+
+    #disable-next-line BCP037
+    parameterValueType: 'Alternative'
+"@
+        }
+
+        $resourceBlock += @"
+
+  }
+}
+"@
+        $connectionResources.Add($resourceBlock)
+
+        $paramBlock = @"
+          ${escapedConnName}: {
+            connectionId: ${connName}Connection.id
+            connectionName: ${connName}Connection.name
+            id: subscriptionResourceId('Microsoft.Web/locations/managedApis', location, '${escapedApiId}')
+"@
+
+        if ($useMsi) {
+            $paramBlock += @"
+
+            connectionProperties: {
+              authentication: {
+                type: 'ManagedServiceIdentity'
+              }
+            }
+"@
+        }
+
+        $paramBlock += "          }"
+        $connectionParameterEntries.Add($paramBlock)
+    }
+
+    $connectionResourcesText = ($connectionResources.ToArray()) -join "`n"
+    $connectionParametersText = ($connectionParameterEntries.ToArray()) -join "`n"
+
+    return @"
+// Generated file. Do not edit directly.
+// Source metadata: $sourceMetadataPath
+// Source definition: $sourceDefinitionPath
+
+targetScope = 'resourceGroup'
+
+@description('Azure region for all resources.')
+param location string = resourceGroup().location
+
+@description('Name of the Logic App playbook.')
+param playbookName string = '$escapedPlaybookName'
+$connectionResourcesText
+
+resource playbook 'Microsoft.Logic/workflows@2019-05-01' = {
+  name: playbookName
+  location: location
+  identity: {
+    type: 'SystemAssigned'
+  }
+  properties: {
+    state: 'Enabled'
+    definition: loadJsonContent('./definition.json')
+    parameters: {
+      '`$connections': {
+        value: {
+$connectionParametersText
+        }
+      }
+    }
+  }
+}
+"@
+}
+
 $detectionRelativePaths = @(Get-SourceContentPaths -SourceContentRoot $SourceRoot)
 
 foreach ($detectionRelativePath in $detectionRelativePaths) {
@@ -629,6 +762,42 @@ foreach ($huntingQueryRelativePath in $huntingQueryRelativePaths) {
 
 if ($huntingQueryRelativePaths.Count -eq 0) {
     Write-Host 'No source hunting queries required artifact regeneration.'
+}
+
+$playbookRelativePaths = @(Get-SourceContentPaths -SourceContentRoot $PlaybookSourceRoot)
+
+foreach ($playbookRelativePath in $playbookRelativePaths) {
+    $sourcePlaybookPath = Join-Path $PlaybookSourceRoot $playbookRelativePath
+    $deployPlaybookPath = Join-Path $PlaybookDeployRoot $playbookRelativePath
+    $metadataPath = Join-Path $sourcePlaybookPath 'metadata.bicep'
+    $definitionPath = Join-Path $sourcePlaybookPath 'definition.json'
+
+    if (-not (Test-Path $sourcePlaybookPath)) {
+        if (Test-Path $deployPlaybookPath) {
+            Remove-Item -Path $deployPlaybookPath -Recurse -Force
+            Write-Host "Removed generated artifacts for deleted playbook '$playbookRelativePath'."
+        }
+        continue
+    }
+
+    if (-not (Test-Path $metadataPath) -or -not (Test-Path $definitionPath)) {
+        throw "Playbook '$playbookRelativePath' must contain both metadata.bicep and definition.json."
+    }
+
+    $metadataTemplate = az bicep build --file $metadataPath --stdout | Out-String | ConvertFrom-Json
+    $metadata = $metadataTemplate.outputs.metadata.value
+    $generatedPlaybookContent = Get-GeneratedPlaybookContent -PlaybookRelativePath $playbookRelativePath -Metadata $metadata
+    $generatedPlaybookPath = Join-Path $deployPlaybookPath 'playbook.bicep'
+    $generatedDefinitionPath = Join-Path $deployPlaybookPath 'definition.json'
+
+    New-Item -Path $deployPlaybookPath -ItemType Directory -Force | Out-Null
+    Set-Content -Path $generatedPlaybookPath -Value $generatedPlaybookContent
+    Copy-Item -Path $definitionPath -Destination $generatedDefinitionPath -Force
+    Write-Host "Updated generated artifact '$generatedPlaybookPath'."
+}
+
+if ($playbookRelativePaths.Count -eq 0) {
+    Write-Host 'No source playbooks required artifact regeneration.'
 }
 
 $allDetectionRelativePaths = @(Get-AllSourceContentPaths -SourceContentRoot $SourceRoot)

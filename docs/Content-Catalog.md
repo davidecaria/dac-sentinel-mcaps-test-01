@@ -10,7 +10,7 @@ Generated file. Do not edit directly.
 | AutomationRules | AutomationRule | Deploy root reserved; onboard a source model under src/** before authoring templates here. |
 | HuntingQueries | HuntingQuery | Generated from src/HuntingQueries/** |
 | Parsers | Parser | Deploy root reserved; onboard a source model under src/** before authoring templates here. |
-| Playbooks | Playbook | Deploy root reserved; onboard a source model under src/** before authoring templates here. |
+| Playbooks | Playbook | Generated from src/Playbooks/** |
 | Workbooks | Workbook | Deploy root reserved; onboard a source model under src/** before authoring templates here. |
 | CustomDetections | CustomDetection | Deploy root reserved; onboard a source model under src/** before authoring templates here. |
 
@@ -26,3 +26,5 @@ Generated file. Do not edit directly.
 | AnalyticsRule | Generated from src/AnalyticRules/** | [AnalyticRules/SentinelMonitoring/SentinelHealth-TableNotReceivingData/rule.bicep](../AnalyticRules/SentinelMonitoring/SentinelHealth-TableNotReceivingData/rule.bicep) |  |
 | AnalyticsRule | Generated from src/AnalyticRules/** | [AnalyticRules/SentinelMonitoring/SentinelHealth-UnauthorizedContentChange/rule.bicep](../AnalyticRules/SentinelMonitoring/SentinelHealth-UnauthorizedContentChange/rule.bicep) |  |
 | HuntingQuery | Generated from src/HuntingQueries/** | [HuntingQueries/AzureAD/EntraID-passwordSpray-Investigation/query.bicep](../HuntingQueries/AzureAD/EntraID-passwordSpray-Investigation/query.bicep) | [HuntingQueries/AzureAD/EntraID-passwordSpray-Investigation/query-41f155b3-16e0-4114-b56a-64ec1b44c582.bicepparam](../HuntingQueries/AzureAD/EntraID-passwordSpray-Investigation/query-41f155b3-16e0-4114-b56a-64ec1b44c582.bicepparam) |
+| Playbook | Generated from src/Playbooks/** | [Playbooks/Block-EntraIDUser-Incident/definition.json](../Playbooks/Block-EntraIDUser-Incident/definition.json) |  |
+| Playbook | Generated from src/Playbooks/** | [Playbooks/Block-EntraIDUser-Incident/playbook.bicep](../Playbooks/Block-EntraIDUser-Incident/playbook.bicep) |  |

@@ -584,6 +584,10 @@ function Deployment($fullDeploymentFlag, $remoteShaTable, $tree) {
             } else {
                 $templateType = "ARM"
                 $templateObject = Get-Content $path | Out-String | ConvertFrom-Json
+                if (-not $templateObject.'$schema' -or -not $templateObject.resources) {
+                    Write-Host "[Info] Skipping $path - not an ARM template (no `$schema or resources)."
+                    return
+                }
             }
 
             if (-not (IsValidResourceType $templateObject))

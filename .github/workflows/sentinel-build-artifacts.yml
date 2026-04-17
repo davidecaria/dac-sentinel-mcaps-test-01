@@ -47,7 +47,7 @@ jobs:
     - name: Commit generated artifacts and catalogs
       shell: pwsh
       run: |
-        git add AnalyticRules docs
+        git add AnalyticRules HuntingQueries Playbooks docs
         if (git diff --cached --quiet) {
           Write-Host 'No generated artifact or catalog changes detected.'
           exit 0
