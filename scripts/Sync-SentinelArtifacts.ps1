@@ -453,6 +453,7 @@ param displayNamePrefix string = ''
 var ruleName = '$escapedRuleName'
 var ruleDisplayName = '$escapedDisplayName'
 var ruleProperties = json('$escapedRulePropertiesJson')
+var ruleQuery = $inlineQuery
 
 resource logAnalyticsWorkspace 'Microsoft.OperationalInsights/workspaces@2023-09-01' existing = {
   name: workspace
@@ -464,7 +465,7 @@ resource analyticRule 'Microsoft.SecurityInsights/alertRules@2025-09-01' = {
   kind: 'Scheduled'
   properties: union(ruleProperties, {
                 displayName: '`${displayNamePrefix}`${ruleDisplayName}'
-    query: $inlineQuery
+    query: ruleQuery
   })
 }
 "@
@@ -554,6 +555,7 @@ param displayNamePrefix string = ''
 var queryName = '$escapedQueryName'
 var queryDisplayName = '$escapedDisplayName'
 var optionalProperties = json('$escapedOptionalPropertiesJson')
+var queryText = $inlineQuery
 
 resource logAnalyticsWorkspace 'Microsoft.OperationalInsights/workspaces@2025-02-01' existing = {
   name: workspace
@@ -565,7 +567,7 @@ resource huntingQuery 'Microsoft.OperationalInsights/workspaces/savedSearches@20
   properties: union(optionalProperties, {
     category: '$escapedCategory'
     displayName: '`${displayNamePrefix}`${queryDisplayName}'
-    query: $inlineQuery
+    query: queryText
     version: $queryVersion
   })
 }

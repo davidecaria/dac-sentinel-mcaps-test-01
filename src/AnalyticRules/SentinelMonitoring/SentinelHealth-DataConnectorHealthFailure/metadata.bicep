@@ -1,7 +1,7 @@
 output metadata object = {
   ruleName: 'SentinelHealth-DataConnectorHealthFailure'
   displayName: 'Sentinel Health - Data Connector Health Failure'
-  description: 'Detects data connector health failures reported by the SentinelHealth table. Connector failures are a leading indicator of log source silence — this rule fires before data gaps form.'
+  description: 'Detects data connector health failures reported by the SentinelHealth table. Connector failures are a leading indicator of log source silence -- this rule fires before data gaps form.'
   enabled: true
   severity: 'High'
   queryFrequency: 'PT1H'
