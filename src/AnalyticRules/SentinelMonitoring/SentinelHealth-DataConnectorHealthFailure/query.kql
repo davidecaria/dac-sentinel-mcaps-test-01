@@ -1,0 +1,16 @@
+let LookBack = 1d;
+let Frequency = 1h;
+SentinelHealth
+| where TimeGenerated >= ago(LookBack)
+| where OperationName == "Data fetch status change"
+| where Status in ("Failure", "Warning")
+| extend FailureReason = tostring(ExtendedProperties.Reason)
+| summarize
+    FirstFailure = min(TimeGenerated),
+    LastFailure = max(TimeGenerated),
+    FailureCount = count(),
+    FailureReasons = make_set(FailureReason, 10),
+    FailureReason = max(FailureReason)
+    by SentinelResourceName, SentinelResourceKind, Status
+| where LastFailure >= ago(Frequency)
+| where FailureCount >= 2

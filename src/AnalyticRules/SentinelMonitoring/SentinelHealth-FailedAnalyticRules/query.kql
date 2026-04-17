@@ -1,0 +1,7 @@
+SentinelHealth
+| where OperationName == "Scheduled analytics rule run"
+| where Status == "Failure"
+| summarize FailureCount = count(), 
+    LastFailureTime = max(TimeGenerated),
+    FailureReasons = make_set(Description, 5) by SentinelResourceName
+| where FailureCount > 3

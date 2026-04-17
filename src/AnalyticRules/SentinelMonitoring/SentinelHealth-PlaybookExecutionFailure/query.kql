@@ -1,0 +1,16 @@
+SentinelHealth
+| where OperationName == "Playbook was triggered"
+| where Status == "Failure"
+| extend PlaybookName = tostring(ExtendedProperties.PlaybookName)
+| extend TriggeredByRule = tostring(ExtendedProperties.TriggeredByRuleName)
+| extend FailureReason = tostring(ExtendedProperties.Reason)
+| summarize
+    FailureCount = count(),
+    FirstFailure = min(TimeGenerated),
+    LastFailure = max(TimeGenerated),
+    FailureReasons = make_set(FailureReason, 10),
+    FailureReason = max(FailureReason),
+    TriggeredByRules = make_set(TriggeredByRule, 10),
+    TriggeredByRule = max(TriggeredByRule)
+    by PlaybookName
+| where FailureCount >= 2

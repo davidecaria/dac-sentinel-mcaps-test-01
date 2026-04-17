@@ -1,0 +1,6 @@
+let AuthorizedCallers = _GetWatchlist('SentinelAuthorizedCallers')
+    | project PrincipalId;
+SentinelAudit
+| extend CallerName_ = tostring(ExtendedProperties.CallerName)
+| where CallerName_ !in (AuthorizedCallers)
+| where isnotempty(SentinelResourceName)

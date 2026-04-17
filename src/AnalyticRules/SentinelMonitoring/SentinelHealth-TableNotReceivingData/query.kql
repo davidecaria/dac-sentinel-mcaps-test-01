@@ -1,0 +1,10 @@
+let TableThresholds = _GetWatchlist('SentinelTableThresholds')
+    | where tolower(Maintenance) != "true"
+    | project TableName, ThresholdHours = toint(Threshold);
+Usage
+| where TimeGenerated >= ago(7d)
+| summarize LastIngestionTime = max(TimeGenerated) by TableName = DataType
+| extend MinutesSinceLastEvent = datetime_diff("minute", now(), LastIngestionTime)
+| join kind=inner TableThresholds on TableName
+| where MinutesSinceLastEvent >= ThresholdHours * 60
+| project TableName, alert_minutes_last_event = MinutesSinceLastEvent, ThresholdHours, LastIngestionTime
